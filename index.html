@@ -1,0 +1,836 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Simulación de correo</title>
+<!--
+  UniGuard · Simulación de correo para la prueba con usuarios (fase 5)
+  Recorrido: inicio (consentimiento) > bloque 1: 4 correos sin la extensión > pantalla de UniGuard >
+  bloque 2: 4 correos con las señales > preguntas finales > pantalla final con la línea de resultado.
+  Versión A: bloque 1 con los correos X y bloque 2 con los Y. Versión B: al revés.
+  La versión se elige al azar al empezar, salvo que el enlace termine en #A o #B.
+  No envía nada a ningún lado: todo vive en la memoria de la página hasta que se cierra.
+  Para cambiar algo entre la primera y la segunda ronda: sección 1 (AJUSTES DE LA RONDA) y sección 2 (CORREOS).
+-->
+<style>
+  :root{
+    color-scheme: light;
+    /* Plan: un correo web genérico sobre fondo gris claro, con la letra del sistema, como en el teléfono.
+       UniGuard aparece solo en el bloque 2, con su azul pizarra y un semáforo en cada correo. */
+    --fondo:#f2f2f6;
+    --papel:#ffffff;
+    --tinta:#1d1d1f;
+    --tinta-2:#6e6e73;
+    --linea:rgba(60,60,67,.16);
+    --relleno:#e9e9ee;
+    --boton:#1d1d1f;
+    --ug:#1e3a5f;            /* azul pizarra de UniGuard */
+    --ug-suave:#e9eff6;
+    /* Colores del semáforo: solo en las señales de UniGuard */
+    --verde:#1a7f37;  --verde-luz:#22a447; --verde-suave:#e7f5ec;
+    --ambar:#7a5200;  --ambar-luz:#f5b800; --ambar-suave:#fff5d6;
+    --rojo:#c4161c;   --rojo-luz:#e8262b;  --rojo-suave:#fdecee;
+    --enlace:#1f5fc4;
+    --sombra:0 1px 2px rgba(0,0,0,.05),0 10px 28px rgba(0,0,0,.08);
+    --letra-titulos:-apple-system,BlinkMacSystemFont,"SF Pro Display",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --letra-texto:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --letra-fija:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  [hidden]{display:none !important}
+  html{background:var(--fondo)}
+  body{margin:0;background:var(--fondo);color:var(--tinta);font-family:var(--letra-texto);font-size:17px;line-height:1.42;letter-spacing:-.01em;-webkit-font-smoothing:antialiased;-webkit-text-size-adjust:100%}
+  #app{max-width:600px;margin:0 auto;padding:20px 16px 56px}
+  h1,h2,h3{font-family:var(--letra-titulos);text-wrap:balance;margin:0}
+  h1{margin:6px 0 14px;font-size:32px;line-height:1.1;font-weight:700;letter-spacing:-.025em}
+  h2{margin:24px 0 10px;font-size:20px;line-height:1.25;font-weight:700;letter-spacing:-.02em}
+  p{margin:.55em 0}
+  b{font-weight:600}
+  button,textarea{font:inherit;letter-spacing:inherit}
+  :focus-visible{outline:3px solid rgba(29,29,31,.35);outline-offset:2px}
+  .centro{text-align:center}
+  .sin-margen{margin:0}
+
+  /* Inicio */
+  .lista{display:flex;flex-direction:column;gap:10px;margin:16px 0;padding:0;list-style:none}
+  .lista li{position:relative;padding-left:18px}
+  .lista li::before{content:"";position:absolute;left:2px;top:.6em;width:6px;height:6px;border-radius:50%;background:var(--tinta-2)}
+  .caja{margin:20px 0;padding:16px;background:var(--papel);border-radius:14px}
+  .fila{display:flex;gap:2px;margin-top:10px;padding:2px;background:var(--relleno);border-radius:11px}
+  .error{min-height:1.3em;margin:.6em 0 0;font-size:15px;color:var(--rojo)}
+  .ayuda{margin:.6em 0 0;font-size:14px;color:var(--tinta-2)}
+  .destacado{font-size:19px;line-height:1.35;font-weight:600;letter-spacing:-.015em}
+
+  /* Avance y situación */
+  .barra{display:flex;justify-content:space-between;gap:12px;margin:0 2px 10px;font-size:13px;font-weight:600;color:var(--tinta-2)}
+  .situacion{margin:0 0 14px;padding:12px 14px;font-size:15px;line-height:1.4;background:var(--papel);border-radius:14px}
+  .situacion b{color:var(--tinta-2)}
+  .pregunta{margin:24px 2px 10px}
+
+  /* Opciones de decisión: lista agrupada, se elige y se confirma con Continuar */
+  .opciones{display:flex;flex-direction:column;background:var(--papel);border-radius:14px;overflow:hidden}
+  .opcion{display:flex;align-items:center;gap:14px;width:100%;min-height:52px;padding:13px 16px;font-size:17px;line-height:1.3;text-align:left;color:var(--tinta);background-color:var(--papel);border:0;cursor:pointer;-webkit-tap-highlight-color:transparent}
+  .opciones .opcion + .opcion{background-image:linear-gradient(var(--linea),var(--linea));background-size:calc(100% - 52px) 1px;background-position:right top;background-repeat:no-repeat}
+  .opcion::before{content:"";flex:none;width:22px;height:22px;border-radius:50%;background:var(--papel);box-shadow:inset 0 0 0 2px #c7c7cc;transition:box-shadow .15s ease}
+  .opcion[aria-pressed="true"]{background-color:#f5f5f8}
+  .opcion[aria-pressed="true"]::before{box-shadow:inset 0 0 0 7px var(--boton)}
+  .opcion:disabled{cursor:default;color:var(--tinta-2)}
+  .opcion[aria-pressed="true"]:disabled{color:var(--tinta)}
+  .opcion.corta{flex:1;justify-content:center;min-height:42px;padding:8px;font-weight:600;background-color:transparent;border-radius:9px}
+  .opcion.corta::before{display:none}
+  .opcion.corta[aria-pressed="true"]{background-color:var(--papel);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+
+  /* Botones */
+  .boton{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:52px;margin-top:16px;padding:14px 20px;font-size:17px;font-weight:600;border:0;border-radius:999px;cursor:pointer}
+  .principal{background:var(--boton);color:#ffffff}
+  .principal:disabled{background:#d1d1d6;color:#8e8e93;cursor:default}
+  .secundario{background:var(--relleno);color:var(--tinta)}
+
+  /* Correo abierto: correo web genérico */
+  .correo{background:var(--papel);border-radius:18px;overflow:hidden;box-shadow:var(--sombra)}
+  .correo-barra{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:42px;padding:8px 14px;font-size:14px;font-weight:600;color:var(--tinta-2);background:#f8f8fa;border-bottom:1px solid var(--linea)}
+  .volver{display:inline-flex;align-items:center;gap:4px;color:var(--enlace)}
+  .ug-activa{display:inline-flex;align-items:center;gap:6px;padding:3px 10px 3px 6px;font-size:12px;font-weight:700;color:var(--ug);background:var(--ug-suave);border-radius:999px}
+  .correo-asunto{margin:16px 16px 12px;font-size:21px;line-height:1.25;font-weight:700;letter-spacing:-.015em}
+  .correo-de{display:flex;gap:10px;padding:0 16px 14px;border-bottom:1px solid var(--linea)}
+  .avatar{flex:none;display:flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:50%;background:#8e8e98;color:#ffffff;font-size:16px;font-weight:600}
+  .correo-de b{display:block;font-size:15px;line-height:1.3}
+  .direccion{display:block;font-size:14px;color:var(--tinta-2);overflow-wrap:anywhere}
+  .correo-de small{display:block;margin-top:2px;font-size:12px;color:#8e8e93}
+  .correo-cuerpo{position:relative;padding:8px 16px 14px;font-size:16px}
+  .correo-cuerpo p{position:relative}
+  .boton-correo{display:inline-block;padding:10px 18px;font-size:15px;font-weight:600;color:#ffffff;background:#24407a;border-radius:6px}
+  .boton-correo.deshabilitado{color:#86898f;background:#e6e7eb;text-decoration:line-through;text-decoration-thickness:2px}
+  .nota-enlace{display:flex;align-items:center;gap:6px;margin-top:-2px;font-size:13px;font-weight:700;color:var(--rojo)}
+  .firma{font-size:15px;color:var(--tinta-2)}
+  .marca-agua{position:absolute;right:14px;bottom:12px;width:112px;height:112px;opacity:.1;pointer-events:none}
+
+  /* Señal de UniGuard: semáforo, nombre de la señal y explicación */
+  .ug{display:flex;flex-direction:column;gap:6px;padding:12px 14px;border-bottom:1px solid var(--linea)}
+  .ug.verde{background:var(--verde-suave)}
+  .ug.amarillo{background:var(--ambar-suave)}
+  .ug.rojo{background:var(--rojo-suave)}
+  .ug-cabeza{display:flex;align-items:center;gap:10px}
+  .semaforo{flex:none;display:inline-flex;align-items:center;gap:4px;padding:4px 6px;background:#22262d;border-radius:999px}
+  .semaforo i{display:block;width:9px;height:9px;border-radius:50%;background:#4b5059}
+  .ug.rojo .semaforo .r{background:var(--rojo-luz);box-shadow:0 0 6px var(--rojo-luz)}
+  .ug.amarillo .semaforo .a{background:var(--ambar-luz);box-shadow:0 0 6px var(--ambar-luz)}
+  .ug.verde .semaforo .v{background:var(--verde-luz);box-shadow:0 0 6px var(--verde-luz)}
+  .ug-estado{display:inline-flex;align-items:center;gap:6px;font-family:var(--letra-titulos);font-size:17px;line-height:1.2;font-weight:700;letter-spacing:-.01em}
+  .ug.verde .ug-estado{color:var(--verde)}
+  .ug.amarillo .ug-estado{color:var(--ambar)}
+  .ug.rojo .ug-estado{color:var(--rojo)}
+  .ug-estado svg{flex:none}
+  .ug-nombre{display:inline-flex;align-items:center;gap:4px;margin-left:auto;font-size:12px;font-weight:700;color:var(--ug)}
+  .ug-texto{margin:0;font-size:15px;line-height:1.35}
+  .boton-reportar{display:inline-flex;align-items:center;justify-content:center;gap:8px;align-self:flex-start;min-height:44px;margin-top:4px;padding:10px 16px;font-size:15px;font-weight:700;line-height:1.2;text-align:left;color:#ffffff;background:var(--rojo);border:0;border-radius:10px;cursor:pointer}
+  .boton-reportar[aria-pressed="true"]{background:#8f0f14;box-shadow:0 0 0 3px var(--rojo-suave),0 0 0 5px var(--rojo)}
+  .boton-reportar.es-muestra{cursor:default;pointer-events:none}
+  .ug-elegido{margin:0;font-size:14px;font-weight:600;color:var(--rojo)}
+
+  /* Pantalla de la extensión */
+  .ug-presentacion{display:flex;flex-direction:column;align-items:center;padding:18px 8px 0;text-align:center}
+  .ug-presentacion h1{margin:12px 0 4px}
+  .muestras{display:flex;flex-direction:column;gap:12px;margin:20px 0 0;padding:0;list-style:none}
+  .muestra{background:var(--papel);border-radius:14px;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+  .muestra .ug{border-bottom:0}
+  .muestra .ug-cabeza{flex-wrap:wrap}
+  .muestra > p{margin:0;padding:10px 14px 13px;font-size:16px}
+
+  /* Preguntas finales */
+  .pregunta-final{margin:24px 2px 10px;font-size:18px}
+  .opcional{font-size:13px;font-weight:600;color:var(--tinta-2)}
+  .campo-comentario{display:block;width:100%;min-height:92px;padding:12px 14px;font-size:16px;line-height:1.4;color:var(--tinta);background:var(--papel);border:0;border-radius:14px;resize:vertical}
+  .campo-comentario:focus{outline:none;box-shadow:0 0 0 3px rgba(29,29,31,.18)}
+  .contador{margin:6px 2px 0;font-size:13px;color:var(--tinta-2);text-align:right}
+
+  /* Pantalla final */
+  .final h1{font-size:26px;margin-bottom:10px}
+  .captura{margin:0 0 10px;padding:11px 14px;font-size:15.5px;font-weight:600;line-height:1.35;color:var(--ug);background:var(--ug-suave);border-radius:14px}
+  .datos{display:grid;grid-template-columns:1fr 1fr 1.35fr;gap:1px;margin:0 0 10px;background:var(--linea);border-radius:14px;overflow:hidden}
+  .datos div{padding:7px 12px 8px;background:var(--papel)}
+  .datos span{display:block;font-size:12px;color:var(--tinta-2)}
+  .datos b{display:block;font-size:15px;line-height:1.3;overflow-wrap:anywhere}
+  .datos .doble{grid-column:span 2}
+  .datos .ancho{grid-column:1 / -1}
+  .tabla-cont{overflow-x:auto;background:var(--papel);border-radius:14px}
+  .tabla{width:100%;border-collapse:collapse;font-size:12.5px;line-height:1.3;letter-spacing:0;font-variant-numeric:tabular-nums}
+  .tabla th,.tabla td{padding:6px 6px;text-align:left;vertical-align:top;border-bottom:1px solid var(--linea)}
+  .tabla thead th{font-size:12px;font-weight:600;color:var(--tinta-2)}
+  .tabla .num{text-align:right;white-space:nowrap}
+  .tabla .cod{font-weight:700;white-space:nowrap}
+  .tabla .dec{white-space:nowrap}
+  .fila-bloque th{padding:7px 8px;font-weight:700;color:var(--tinta);background:#f7f7fa}
+  .tabla tr:last-child td{border-bottom:0}
+  .linea{display:block;width:100%;margin:8px 0 0;padding:12px;font:13px/1.45 var(--letra-fija);letter-spacing:0;color:var(--tinta);background:var(--papel);border:0;border-radius:14px;resize:none}
+  .copiado{min-height:1.3em;margin:.5em 0 0;font-size:14px;font-weight:600}
+  .consejo{margin-top:18px;padding:14px 16px;font-size:15px;line-height:1.4;background:var(--papel);border-radius:14px}
+
+  @media (prefers-reduced-motion: reduce){*,*::before{animation:none !important;transition:none !important}}
+</style>
+</head>
+<body>
+<main id="app"></main>
+<noscript><p style="padding:16px">Esta simulación necesita que el navegador tenga JavaScript activado.</p></noscript>
+<script>
+"use strict";
+/* ==========================================================================
+   ORDEN DEL CÓDIGO
+   1. Ajustes de la ronda      2. Correos           3. Versiones
+   4. Estado y reloj           5. Recorrido         6. Pantallas
+   7. Vista del correo y señales de UniGuard       8. Utilidades
+   9. Arranque
+   Entre la primera y la segunda ronda, lo normal es cambiar solo las secciones 1 y 2.
+   ========================================================================== */
+
+/* 1. AJUSTES DE LA RONDA ----------------------------------------------------------- */
+
+// Letra inicial del código de participante (por ejemplo, R4821).
+// Ronda 1: "R". Para la ronda 2 cámbiala a "S": así la hoja de registro distingue las rondas
+// sin cambiar el formato de la línea de resultado.
+const PREFIJO_CODIGO = "R";
+
+// Textos de la pantalla de inicio (consentimiento). No mencionan UniGuard ni las señales.
+// {total} se reemplaza por el número de correos.
+const TEXTOS = {
+  titulo: "Simulación de correo",
+  proyecto: "Es parte de un proyecto de la clase de Emprendimiento de la USFQ.",
+  inicio: [
+    "Vas a ver {total} correos y decidir qué harías con cada uno, como en tu bandeja real.",
+    "Toma unos 5 minutos.",
+    "No se piden nombre ni datos personales.",
+    "Solo se registran tus elecciones y tus tiempos en esta pantalla, y nada se envía a ningún lado.",
+    "Los correos, las empresas y la universidad que verás son ficticios.",
+    "No cierres ni recargues la página hasta terminar."
+  ],
+  preguntaUsfq: "¿Eres estudiante de la USFQ?",
+  botonEmpezar: "Acepto y empiezo",
+  preguntaCorreo: "¿Qué harías con este correo?",
+  preguntasTitulo: "Para terminar",
+  pregunta1Usfq: "¿Dónde lees tu correo de la USFQ la mayor parte del tiempo?",
+  pregunta1Otro: "¿Dónde lees tu correo la mayor parte del tiempo?",   // si respondió que no es de la USFQ
+  pregunta2: "¿Instalarías UniGuard en tu navegador?",
+  pregunta3: "¿Qué te ayudó o te confundió de las señales?",
+  captura: "Envía una captura de esta pantalla a quien te invitó, o copia la línea de resultado y pégala en el chat.",
+  consejo: "ante la duda, revisa la dirección completa del remitente y confirma en la página oficial."
+};
+
+// Decisiones: las mismas cuatro en cada correo de los dos bloques. El código va en la línea de resultado.
+const DECISIONES = [
+  { codigo: "A", texto: "Abrir el enlace o responder", corto: "Abrir" },
+  { codigo: "I", texto: "Ignorar o borrar", corto: "Ignorar" },
+  { codigo: "R", texto: "Reportar como estafa", corto: "Reportar" },
+  { codigo: "C", texto: "Confirmar por otro medio (página oficial, llamar o preguntar a alguien)", corto: "Confirmar" }
+];
+// En el bloque 2, el botón de la alerta roja equivale a elegir esta decisión:
+const DECISION_DEL_BOTON_ROJO = "R";
+
+// Señales de UniGuard: solo aparecen en el bloque 2.
+const SENALES = {
+  verde:    { color: "Verde",    nombre: "Marca de agua",  texto: "Este correo viene de una cuenta registrada de la universidad." },
+  amarillo: { color: "Amarillo", nombre: "Externo",        texto: "Este correo viene de fuera de la universidad. Ten precaución." },
+  rojo:     { color: "Rojo",     nombre: "Alerta crítica", texto: "Este correo imita a la universidad desde otra dirección.",
+              enlace: "Enlace deshabilitado por UniGuard", boton: "Reportar y añadir a lista negra",
+              elegido: "Elegiste reportar como estafa. Confírmalo abajo con Continuar." }
+};
+// Qué señal lleva cada tipo de correo. Los dos externos llevan la misma señal, a propósito.
+const SENAL_DEL_TIPO = {
+  "universidad-real": "verde",
+  "imita-universidad": "rojo",
+  "externo-real": "amarillo",
+  "externo-falso": "amarillo"
+};
+
+// Pantalla de la extensión, entre los dos bloques
+const PRESENTACION = {
+  intro: "Ahora tienes instalada UniGuard, una extensión que revisa cada correo y le pone una señal.",
+  colores: [
+    { senal: "verde",    texto: "el correo viene de una cuenta registrada de la universidad." },
+    { senal: "amarillo", texto: "el correo viene de fuera de la universidad; pide precaución." },
+    { senal: "rojo",     texto: "el correo imita a la universidad desde otra dirección. Su enlace queda deshabilitado y la alerta trae el botón “Reportar y añadir a lista negra”." }
+  ],
+  cierre: "Decide igual que antes."
+};
+
+// Preguntas finales: el código de cada respuesta va en la línea de resultado.
+const DONDE_LEE = [
+  { codigo: "app-celular",           texto: "Aplicación en el celular" },
+  { codigo: "navegador-celular",     texto: "Navegador en el celular" },
+  { codigo: "navegador-computadora", texto: "Navegador en la computadora" },
+  { codigo: "app-computadora",       texto: "Aplicación en la computadora" }
+];
+const INSTALARIA = [
+  { codigo: "si",     texto: "Sí" },
+  { codigo: "talvez", texto: "Tal vez" },
+  { codigo: "no",     texto: "No" }
+];
+const MAX_COMENTARIO = 150;
+
+/* 2. CORREOS -------------------------------------------------------------------------
+   Universidad Nevado Azul (nevadoazul.edu.ec), Banco Arupo, Envíos Quilla, Librería Hoja Viva
+   y Fundación Brújula Joven son ficticios. Los botones de los correos no llevan a ningún lado.
+   Identificadores fijos:
+     X1, Y1  universidad, real
+     X2, Y2  imita a la universidad, falso (la dirección se parece a la oficial)
+     X3, Y3  externo, real (encaja con su situación)
+     X4, Y4  externo, falso (dirección parecida, urgencia y pedido de pago o de datos)
+   Los grupos X e Y son parejos: el mismo tipo en cada número y temas distintos. */
+const UNI = "Universidad Nevado Azul";
+
+const CORREOS = {
+  X1: {
+    tipo: "universidad-real",
+    situacion: `Estudias en la ${UNI}. La semana pasada sacaste un libro de la biblioteca.`,
+    deNombre: `Biblioteca ${UNI}`,
+    deCorreo: "biblioteca@nevadoazul.edu.ec",
+    asunto: "Tu préstamo vence el jueves",
+    hora: "Hoy, 08:12",
+    cuerpo: [
+      "Hola:",
+      "El libro que sacaste la semana pasada vence este jueves. Si todavía lo necesitas, puedes renovarlo una vez por siete días más, sin costo.",
+      "Para renovarlo, entra al catálogo de la biblioteca con tu usuario de la universidad."
+    ],
+    boton: "Renovar mi préstamo",
+    firma: `Biblioteca Central<br>${UNI}`
+  },
+  X2: {
+    tipo: "imita-universidad",
+    situacion: `Estudias en la ${UNI}. La semana pasada diste el examen parcial de Química.`,
+    deNombre: `Secretaría Académica ${UNI}`,
+    deCorreo: "notas@nevadoazul-edu.ec",          // imita a nevadoazul.edu.ec: un guion en lugar del punto
+    asunto: "Ya se publicaron las notas del parcial",
+    hora: "Hoy, 09:03",
+    cuerpo: [
+      "Hola:",
+      "Ya están publicadas las notas de los exámenes parciales. Si quieres pedir una revisión de tu nota, hazlo antes del lunes a las 12:00. Después ya no se reciben pedidos.",
+      "Para ver tu nota, entra con tu usuario de la universidad."
+    ],
+    boton: "Ver mi nota",
+    firma: `Secretaría Académica<br>${UNI}`
+  },
+  X3: {
+    tipo: "externo-real",
+    situacion: "Hace unos minutos creaste una cuenta en la página de la Librería Hoja Viva.",
+    deNombre: "Librería Hoja Viva",
+    deCorreo: "cuentas@hojaviva.com.ec",
+    asunto: "Activa tu cuenta de Hoja Viva",
+    hora: "Hoy, 10:21",
+    cuerpo: [
+      "¡Hola!",
+      "Gracias por crear tu cuenta en Hoja Viva. Para terminar, actívala con el botón de abajo. El botón funciona durante 24 horas.",
+      "Con tu cuenta puedes guardar los libros que te interesan y seguir tus pedidos."
+    ],
+    boton: "Activar mi cuenta",
+    firma: "Librería Hoja Viva"
+  },
+  X4: {
+    tipo: "externo-falso",
+    situacion: "Tienes una cuenta y una tarjeta de débito en Banco Arupo.",
+    deNombre: "Banco Arupo",
+    deCorreo: "alertas@bancoarupo-seguridad.com",  // dirección parecida a la de un banco
+    asunto: "Bloqueamos tu tarjeta por seguridad",
+    hora: "Hoy, 07:58",
+    cuerpo: [
+      "Estimado cliente:",
+      "Detectamos un intento de compra de $189,90 con tu tarjeta y la bloqueamos por seguridad.",
+      "Para desbloquearla, confirma tu usuario y tu clave de la banca en línea en las próximas 24 horas. Si no lo haces, tu tarjeta quedará cancelada."
+    ],
+    boton: "Desbloquear mi tarjeta",
+    firma: "Servicio al Cliente<br>Banco Arupo"
+  },
+  Y1: {
+    tipo: "universidad-real",
+    situacion: `Estudias en la ${UNI}. Esta semana empezó la evaluación de profesores del semestre.`,
+    deNombre: `Dirección Académica ${UNI}`,
+    deCorreo: "evaluacion@nevadoazul.edu.ec",
+    asunto: "Evalúa a tus profesores hasta el viernes",
+    hora: "Hoy, 07:45",
+    cuerpo: [
+      "Hola:",
+      "Ya puedes evaluar a los profesores de tus materias de este semestre. Te toma unos 10 minutos y tus respuestas son anónimas. Tienes plazo hasta el viernes.",
+      "Para hacerlo, entra al portal de evaluación con tu usuario de la universidad."
+    ],
+    boton: "Ir a la evaluación",
+    firma: `Dirección Académica<br>${UNI}`
+  },
+  Y2: {
+    tipo: "imita-universidad",
+    situacion: `Estudias en la ${UNI}. Este semestre la universidad está cambiando los carnés de los estudiantes.`,
+    deNombre: `Bienestar Estudiantil ${UNI}`,
+    deCorreo: "carnes@nevadoazul.edu.co",          // imita a nevadoazul.edu.ec: termina en .co y no en .ec
+    asunto: "Sube tu foto para el nuevo carné",
+    hora: "Hoy, 08:37",
+    cuerpo: [
+      "Hola:",
+      "Para recibir tu nuevo carné, sube una foto tuya y revisa tus datos antes del miércoles. Si no lo haces, recibirás tu carné recién el próximo semestre.",
+      "Para hacerlo, entra con tu usuario de la universidad."
+    ],
+    boton: "Subir mi foto",
+    firma: `Bienestar Estudiantil<br>${UNI}`
+  },
+  Y3: {
+    tipo: "externo-real",
+    situacion: "Hace dos semanas postulaste a una beca de la Fundación Brújula Joven para estudiantes universitarios.",
+    deNombre: "Fundación Brújula Joven",
+    deCorreo: "becas@brujulajoven.org",
+    asunto: "Tu postulación pasó a la etapa de entrevista",
+    hora: "Hoy, 09:40",
+    cuerpo: [
+      "Hola:",
+      "Gracias por postular a la beca de la Fundación Brújula Joven. Tu postulación pasó a la etapa de entrevista.",
+      "Elige un horario para una entrevista por videollamada de 20 minutos. Tienes plazo hasta el miércoles."
+    ],
+    boton: "Elegir mi horario",
+    firma: "Equipo de Becas<br>Fundación Brújula Joven"
+  },
+  Y4: {
+    tipo: "externo-falso",
+    situacion: "Compraste unos audífonos por internet y estás esperando el paquete.",
+    deNombre: "Envíos Quilla",
+    deCorreo: "entregas@enviosquilla-pagos.com",   // dirección parecida a la de una empresa de envíos
+    asunto: "Tu paquete está retenido",
+    hora: "Hoy, 08:50",
+    cuerpo: [
+      "Estimado cliente:",
+      "No pudimos entregar tu paquete porque falta pagar $1,95 por el envío.",
+      "Para recibirlo, ingresa los datos de tu tarjeta y paga en las próximas 24 horas. Si no lo haces, el paquete regresará a la tienda."
+    ],
+    boton: "Pagar $1,95",
+    firma: "Servicio al Cliente<br>Envíos Quilla"
+  }
+};
+
+/* 3. VERSIONES: qué grupo de correos va en cada bloque ---------------------------- */
+const GRUPOS = { X: ["X1", "X2", "X3", "X4"], Y: ["Y1", "Y2", "Y3", "Y4"] };
+const VERSIONES = {
+  A: { bloque1: "X", bloque2: "Y" },
+  B: { bloque1: "Y", bloque2: "X" }
+};
+const TOTAL = GRUPOS.X.length + GRUPOS.Y.length;
+
+/* 4. ESTADO Y RELOJ ------------------------------------------------------------------ */
+const app = document.getElementById("app");
+// Lo único que se guarda, y solo en la memoria de esta página.
+const estado = {
+  codigo: null, version: null, usfq: null,
+  guion: [], paso: 0,
+  registros: [],          // { id, bloque, n, decision, segundos }, en el orden en que se mostraron
+  lee: null, instala: null, comentario: ""
+};
+
+// El reloj se detiene mientras la página está oculta (por ejemplo, si la persona cambia de
+// aplicación o de pestaña), para que los tiempos midan solo el rato frente al correo.
+let ocultoDesde = null;
+let tiempoOculto = 0;
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    if (ocultoDesde === null) ocultoDesde = performance.now();
+  } else if (ocultoDesde !== null) {
+    tiempoOculto += performance.now() - ocultoDesde;
+    ocultoDesde = null;
+  }
+});
+function reloj() {
+  const ahora = performance.now();
+  return ahora - tiempoOculto - (ocultoDesde !== null ? ahora - ocultoDesde : 0);
+}
+function segundosDesde(inicio) { return (reloj() - inicio) / 1000; }
+
+/* 5. RECORRIDO ------------------------------------------------------------------------
+   El recorrido es una lista de pasos. Dentro de cada bloque, los 4 correos salen en orden al azar. */
+function construirGuion(version) {
+  const v = VERSIONES[version];
+  const guion = [];
+  let n = 0;
+  barajar(GRUPOS[v.bloque1]).forEach((id) => guion.push({ tipo: "correo", bloque: 1, id, n: ++n }));
+  guion.push({ tipo: "extension" });
+  barajar(GRUPOS[v.bloque2]).forEach((id) => guion.push({ tipo: "correo", bloque: 2, id, n: ++n }));
+  guion.push({ tipo: "preguntas" }, { tipo: "final" });
+  return guion;
+}
+function mostrarPaso() {
+  const paso = estado.guion[estado.paso];
+  PANTALLAS[paso.tipo](paso);
+  window.scrollTo(0, 0);
+}
+function avanzar() {
+  estado.paso += 1;
+  mostrarPaso();
+}
+
+/* 6. PANTALLAS ----------------------------------------------------------------------- */
+function pantallaInicio() {
+  let usfq = null;
+  app.innerHTML = `
+    <h1>${TEXTOS.titulo}</h1>
+    <p>${TEXTOS.proyecto}</p>
+    <ul class="lista">${TEXTOS.inicio.map((t) => `<li>${t.replace("{total}", TOTAL)}</li>`).join("")}</ul>
+    <div class="caja">
+      <p id="etiqueta-usfq" class="sin-margen"><b>${TEXTOS.preguntaUsfq}</b></p>
+      <div class="fila" role="group" aria-labelledby="etiqueta-usfq">
+        <button type="button" id="usfq-si" class="opcion corta" aria-pressed="false" data-usfq="si">Sí</button>
+        <button type="button" id="usfq-no" class="opcion corta" aria-pressed="false" data-usfq="no">No</button>
+      </div>
+      <p id="error" class="error" role="alert"></p>
+    </div>
+    <button type="button" id="empezar" class="boton principal">${TEXTOS.botonEmpezar}</button>`;
+
+  const botones = Array.from(app.querySelectorAll("[data-usfq]"));
+  const error = document.getElementById("error");
+  botones.forEach((b) => b.addEventListener("click", () => {
+    usfq = b.dataset.usfq;
+    botones.forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    error.textContent = "";
+  }));
+  document.getElementById("empezar").addEventListener("click", () => {
+    if (!usfq) { error.textContent = "Responde si eres estudiante de la USFQ para empezar."; return; }
+    estado.codigo = nuevoCodigo();
+    estado.version = elegirVersion();
+    estado.usfq = usfq;
+    estado.guion = construirGuion(estado.version);
+    estado.paso = 0;
+    estado.registros = [];
+    mostrarPaso();
+  });
+}
+
+function pantallaCorreo(paso) {
+  const c = CORREOS[paso.id];
+  const senal = paso.bloque === 2 ? SENAL_DEL_TIPO[c.tipo] : null;   // sin señal en el bloque 1
+  app.innerHTML = `
+    <div class="barra"><span>Correo ${paso.n} de ${TOTAL}</span></div>
+    <p class="situacion"><b>Situación:</b> ${c.situacion}</p>
+    ${vistaCorreo(paso.id, c, senal)}
+    <h2 class="pregunta">${TEXTOS.preguntaCorreo}</h2>
+    <div id="opciones"></div>`;
+  const inicio = reloj();
+  const reportar = document.getElementById("reportar");      // solo existe en la alerta roja
+  const elegido = document.getElementById("ug-elegido");
+  const opciones = montarOpciones(
+    document.getElementById("opciones"),
+    DECISIONES.map((d) => ({ k: d.codigo, texto: d.texto })),
+    (k) => {
+      estado.registros.push({ id: paso.id, bloque: paso.bloque, n: paso.n, decision: k, segundos: Math.round(segundosDesde(inicio)) });
+      avanzar();
+    },
+    (k) => {
+      if (!reportar) return;
+      const esBoton = k === DECISION_DEL_BOTON_ROJO;
+      reportar.setAttribute("aria-pressed", String(esBoton));
+      elegido.hidden = !esBoton;
+    });
+  if (reportar) reportar.addEventListener("click", () => opciones.elegir(DECISION_DEL_BOTON_ROJO));
+}
+
+function pantallaExtension() {
+  app.innerHTML = `
+    <section class="ug-presentacion">
+      ${escudoUG(68, true)}
+      <h1>UniGuard</h1>
+      <p class="destacado">${PRESENTACION.intro}</p>
+    </section>
+    <ul class="muestras">
+      ${PRESENTACION.colores.map((m) => `
+        <li class="muestra">
+          ${bandaUG(m.senal, true)}
+          <p><b>${SENALES[m.senal].color}, “${SENALES[m.senal].nombre}”:</b> ${m.texto}</p>
+        </li>`).join("")}
+    </ul>
+    <p class="destacado centro">${PRESENTACION.cierre}</p>
+    <button type="button" id="seguir" class="boton principal">Continuar</button>`;
+  document.getElementById("seguir").addEventListener("click", avanzar);
+}
+
+function pantallaPreguntas() {
+  const p1 = estado.usfq === "si" ? TEXTOS.pregunta1Usfq : TEXTOS.pregunta1Otro;
+  app.innerHTML = `
+    <h1>${TEXTOS.preguntasTitulo}</h1>
+    <h2 class="pregunta-final" id="p1">1. ${p1}</h2>
+    <div id="lee"></div>
+    <h2 class="pregunta-final" id="p2">2. ${TEXTOS.pregunta2}</h2>
+    <div id="instala"></div>
+    <h2 class="pregunta-final" id="p3"><label for="comentario">3. ${TEXTOS.pregunta3}</label> <span class="opcional">Opcional</span></h2>
+    <textarea id="comentario" class="campo-comentario" maxlength="${MAX_COMENTARIO}" rows="3" placeholder="Escribe aquí en pocas palabras"></textarea>
+    <p id="contador" class="contador">0 de ${MAX_COMENTARIO} caracteres</p>
+    <p id="pista" class="ayuda centro">Responde las preguntas 1 y 2 para ver tu resultado.</p>
+    <button type="button" id="terminar" class="boton principal" disabled>Ver mi resultado</button>`;
+  let lee = null;
+  let instala = null;
+  const terminar = document.getElementById("terminar");
+  const pista = document.getElementById("pista");
+  const revisar = () => {
+    const listo = Boolean(lee && instala);
+    terminar.disabled = !listo;
+    pista.hidden = listo;
+  };
+  grupoOpciones(document.getElementById("lee"), DONDE_LEE, "p1", (k) => { lee = k; revisar(); });
+  grupoOpciones(document.getElementById("instala"), INSTALARIA, "p2", (k) => { instala = k; revisar(); });
+  const campo = document.getElementById("comentario");
+  const contador = document.getElementById("contador");
+  campo.addEventListener("input", () => { contador.textContent = `${campo.value.length} de ${MAX_COMENTARIO} caracteres`; });
+  terminar.addEventListener("click", () => {
+    if (!lee || !instala) return;
+    estado.lee = lee;
+    estado.instala = instala;
+    estado.comentario = limpiarComentario(campo.value);
+    avanzar();
+  });
+}
+
+// No muestra qué correos eran falsos, para no influir en otros participantes.
+function pantallaFinal() {
+  const textoDe = (lista, codigo) => (lista.find((x) => x.codigo === codigo) || { texto: "Sin respuesta" }).texto;
+  const filas = (bloque) => estado.registros.filter((r) => r.bloque === bloque).map((r) => `
+    <tr>
+      <td class="num">${r.n}</td>
+      <td class="cod">${r.id}</td>
+      <td>${CORREOS[r.id].asunto}</td>
+      <td class="dec"><b>${r.decision}</b> ${cortoDe(r.decision)}</td>
+      <td class="num">${r.segundos}</td>
+    </tr>`).join("");
+  app.innerHTML = `
+    <div class="final">
+      <h1>Gracias por participar</h1>
+      <p class="captura">${TEXTOS.captura}</p>
+      <div class="datos">
+        <div><span>Código</span><b>${estado.codigo}</b></div>
+        <div><span>Versión</span><b>${estado.version}</b></div>
+        <div><span>Estudiante USFQ</span><b>${estado.usfq === "si" ? "Sí" : "No"}</b></div>
+        <div class="doble"><span>Lee su correo en</span><b>${textoDe(DONDE_LEE, estado.lee)}</b></div>
+        <div><span>Instalaría UniGuard</span><b>${textoDe(INSTALARIA, estado.instala)}</b></div>
+        ${estado.comentario ? `<div class="ancho"><span>Comentario</span><b>${escapar(estado.comentario)}</b></div>` : ""}
+      </div>
+      <div class="tabla-cont">
+        <table class="tabla">
+          <thead><tr><th class="num">N.º</th><th>Correo</th><th>Asunto</th><th>Decisión</th><th class="num">Seg.</th></tr></thead>
+          <tbody>
+            <tr class="fila-bloque"><th colspan="5">Bloque 1, sin UniGuard</th></tr>
+            ${filas(1)}
+            <tr class="fila-bloque"><th colspan="5">Bloque 2, con UniGuard</th></tr>
+            ${filas(2)}
+          </tbody>
+        </table>
+      </div>
+      <h2>Resultado en una línea</h2>
+      <textarea id="linea" class="linea" rows="3" readonly aria-label="Resultado en una línea"></textarea>
+      <button type="button" id="copiar" class="boton secundario">Copiar resultado</button>
+      <p id="copiado" class="copiado" role="status"></p>
+      <p class="consejo"><b>Un consejo para tu correo real:</b> ${TEXTOS.consejo}</p>
+    </div>`;
+  const linea = document.getElementById("linea");
+  linea.value = lineaResultado();
+  // La línea se ve completa, sin barra de desplazamiento, para que salga entera en la captura.
+  const ajustarAlto = () => { linea.style.height = "auto"; linea.style.height = linea.scrollHeight + "px"; };
+  ajustarAlto();
+  window.addEventListener("resize", ajustarAlto);
+  document.getElementById("copiar").addEventListener("click", () =>
+    copiar(linea.value, linea, document.getElementById("copiado"), "Resultado copiado."));
+}
+
+const PANTALLAS = {
+  correo: pantallaCorreo,
+  extension: pantallaExtension,
+  preguntas: pantallaPreguntas,
+  final: pantallaFinal
+};
+
+/* 7. VISTA DEL CORREO Y SEÑALES DE UNIGUARD ------------------------------------------- */
+// Correo abierto, como en un correo web genérico. Con señal (bloque 2), UniGuard pone su
+// semáforo arriba; si la señal es roja, además deshabilita el enlace.
+function vistaCorreo(id, c, senal) {
+  const enlace = senal === "rojo"
+    ? `<p><span class="boton-correo deshabilitado">${c.boton}</span></p>
+       <p class="nota-enlace">${icono("bloqueo", 15)}${SENALES.rojo.enlace}</p>`
+    : `<p><span class="boton-correo">${c.boton}</span></p>`;
+  return `
+    <article class="correo" data-id="${id}" aria-label="Correo abierto">
+      <div class="correo-barra">
+        <span class="volver">${icono("volver", 16)}Recibidos</span>
+        ${senal ? `<span class="ug-activa">${escudoUG(16)}UniGuard activa</span>` : ""}
+      </div>
+      ${senal ? bandaUG(senal) : ""}
+      <h3 class="correo-asunto">${c.asunto}</h3>
+      <div class="correo-de">
+        <span class="avatar" aria-hidden="true">${c.deNombre.charAt(0)}</span>
+        <div><b>${c.deNombre}</b><span class="direccion">${c.deCorreo}</span><small>Para: mí · ${c.hora}</small></div>
+      </div>
+      <div class="correo-cuerpo">
+        ${senal === "verde" ? marcaDeAgua() : ""}
+        ${c.cuerpo.map((t) => `<p>${t}</p>`).join("")}
+        ${enlace}
+        <p class="firma">${c.firma}</p>
+      </div>
+    </article>`;
+}
+
+// Franja de UniGuard. En la pantalla de la extensión se muestra solo como ejemplo (muestra = true).
+function bandaUG(senal, muestra = false) {
+  const s = SENALES[senal];
+  const cabeza = `
+    <div class="ug-cabeza">
+      <span class="semaforo" aria-hidden="true"><i class="r"></i><i class="a"></i><i class="v"></i></span>
+      <span class="ug-estado">${glifo(senal, 18)}${s.nombre}</span>
+      <span class="ug-nombre">${escudoUG(14)}UniGuard</span>
+    </div>`;
+  if (muestra) {
+    const ejemploBoton = senal === "rojo"
+      ? `<span class="boton-reportar es-muestra" aria-hidden="true">${icono("bandera", 16)}${s.boton}</span>` : "";
+    return `<div class="ug ${senal}">${cabeza}${ejemploBoton}</div>`;
+  }
+  const boton = senal === "rojo" ? `
+      <button type="button" id="reportar" class="boton-reportar" aria-pressed="false">${icono("bandera", 16)}${s.boton}</button>
+      <p id="ug-elegido" class="ug-elegido" role="status" hidden>${s.elegido}</p>` : "";
+  return `
+    <section class="ug ${senal}" data-senal="${senal}" aria-label="Señal de UniGuard: ${s.nombre}">
+      ${cabeza}
+      <p class="ug-texto">${s.texto}</p>
+      ${boton}
+    </section>`;
+}
+
+// Escudo de UniGuard con tres luces, como un semáforo. Marca genérica, inventada.
+function escudoUG(tam, aColor = false) {
+  const luces = aColor ? ["var(--rojo-luz)", "var(--ambar-luz)", "var(--verde-luz)"] : ["#ffffff", "#ffffff", "#ffffff"];
+  return `<svg width="${tam}" height="${tam}" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <path d="M12 1.8 20.4 5v6.4c0 5.1-3.5 8.9-8.4 10.9-4.9-2-8.4-5.8-8.4-10.9V5z" style="fill:var(--ug)"/>
+    <circle cx="12" cy="7.6" r="1.75" style="fill:${luces[0]}"/>
+    <circle cx="12" cy="12" r="1.75" style="fill:${luces[1]}"/>
+    <circle cx="12" cy="16.4" r="1.75" style="fill:${luces[2]}"/>
+  </svg>`;
+}
+// Cada señal tiene su color y además su forma, para distinguirlas sin depender del color.
+function glifo(senal, tam) {
+  const forma = {
+    verde: `<circle cx="12" cy="12" r="10.5" style="fill:var(--verde)"/><path d="M7.4 12.3l3.1 3.1 6.1-6.4" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>`,
+    amarillo: `<path d="M12 2.2 22.6 20.6H1.4z" style="fill:var(--ambar-luz)" stroke-linejoin="round"/><rect x="10.8" y="8.4" width="2.4" height="6.6" rx="1.2" fill="#3a2700"/><circle cx="12" cy="17.6" r="1.4" fill="#3a2700"/>`,
+    rojo: `<path d="M8.1 2h7.8L22 8.1v7.8L15.9 22H8.1L2 15.9V8.1z" style="fill:var(--rojo)"/><rect x="10.75" y="6.2" width="2.5" height="8.2" rx="1.25" fill="#ffffff"/><circle cx="12" cy="17.6" r="1.55" fill="#ffffff"/>`
+  }[senal];
+  return `<svg width="${tam}" height="${tam}" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${forma}</svg>`;
+}
+// La "marca de agua" de la señal verde: un escudo claro al fondo del correo.
+function marcaDeAgua() {
+  return `<svg class="marca-agua" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <path d="M12 1.8 20.4 5v6.4c0 5.1-3.5 8.9-8.4 10.9-4.9-2-8.4-5.8-8.4-10.9V5z" style="fill:var(--verde)"/>
+    <path d="M8.2 12.2l2.7 2.7 5-5.3" fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>`;
+}
+// Íconos de línea
+const ICONOS = {
+  volver: '<path d="M14.5 5.5 8 12l6.5 6.5"/>',
+  bandera: '<path d="M5.5 21V4"/><path d="M5.5 4.5h11l-2.2 4 2.2 4h-11"/>',
+  bloqueo: '<circle cx="12" cy="12" r="8.5"/><path d="M6 6l12 12"/>'
+};
+function icono(nombre, tam) {
+  return `<svg width="${tam}" height="${tam}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${ICONOS[nombre]}</svg>`;
+}
+
+/* 8. UTILIDADES ------------------------------------------------------------------------ */
+// Decisión de cada correo: se elige una opción y se confirma con "Continuar".
+// Así un toque accidental en el celular no queda registrado. Devuelve elegir(k) para que
+// el botón de la alerta roja marque la misma opción.
+function montarOpciones(contenedor, items, alConfirmar, alCambiar) {
+  let elegida = null;
+  let cerrado = false;
+  contenedor.innerHTML = `
+    <div class="opciones">
+      ${items.map((it) => `<button type="button" class="opcion" aria-pressed="false" data-k="${it.k}"><span>${it.texto}</span></button>`).join("")}
+    </div>
+    <button type="button" class="boton principal continuar" disabled>Continuar</button>`;
+  const botones = Array.from(contenedor.querySelectorAll(".opcion"));
+  const continuar = contenedor.querySelector(".continuar");
+  function elegir(k) {
+    if (cerrado) return;
+    elegida = k;
+    botones.forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.k === k)));
+    continuar.disabled = false;
+    if (alCambiar) alCambiar(k);
+  }
+  botones.forEach((b) => b.addEventListener("click", () => elegir(b.dataset.k)));
+  continuar.addEventListener("click", () => {
+    if (cerrado || !elegida) return;
+    cerrado = true;
+    continuar.disabled = true;
+    botones.forEach((x) => { x.disabled = true; });
+    alConfirmar(elegida);
+  });
+  return { elegir };
+}
+// Preguntas finales: solo se elige; el botón "Ver mi resultado" confirma todo junto.
+function grupoOpciones(contenedor, items, etiqueta, alCambiar) {
+  contenedor.innerHTML = `
+    <div class="opciones" role="group" aria-labelledby="${etiqueta}">
+      ${items.map((it) => `<button type="button" class="opcion" aria-pressed="false" data-k="${it.codigo}"><span>${it.texto}</span></button>`).join("")}
+    </div>`;
+  const botones = Array.from(contenedor.querySelectorAll(".opcion"));
+  botones.forEach((b) => b.addEventListener("click", () => {
+    botones.forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    alCambiar(b.dataset.k);
+  }));
+}
+function cortoDe(codigo) { return (DECISIONES.find((d) => d.codigo === codigo) || { corto: codigo }).corto; }
+
+// Azar con el generador del navegador; si no está, con Math.random.
+function azar() {
+  try { const a = new Uint32Array(1); crypto.getRandomValues(a); return a[0] / 4294967296; }
+  catch (e) { return Math.random(); }
+}
+function barajar(lista) {
+  const copia = lista.slice();
+  for (let i = copia.length - 1; i > 0; i--) {
+    const j = Math.floor(azar() * (i + 1));
+    [copia[i], copia[j]] = [copia[j], copia[i]];
+  }
+  return copia;
+}
+function nuevoCodigo() { return PREFIJO_CODIGO + String(1000 + Math.floor(azar() * 9000)); }
+// Versión al azar, salvo que el enlace termine en #A o #B.
+function elegirVersion() {
+  let pedida = "";
+  try { pedida = decodeURIComponent(location.hash.replace(/^#/, "")).trim().toUpperCase(); } catch (e) { pedida = ""; }
+  if (VERSIONES[pedida]) return pedida;
+  return azar() < 0.5 ? "A" : "B";
+}
+
+// Línea de resultado, separada por |, en este orden: código, versión, si es de la USFQ,
+// cada correo como identificador:decisión:segundos en el orden en que se mostró,
+// dónde lee el correo, si instalaría UniGuard y el comentario.
+function lineaResultado() {
+  return [
+    estado.codigo,
+    estado.version,
+    "USFQ:" + estado.usfq,
+    ...estado.registros.map((r) => `${r.id}:${r.decision}:${r.segundos}`),
+    "lee:" + estado.lee,
+    "instala:" + estado.instala,
+    "com:" + estado.comentario
+  ].join("|");
+}
+// El comentario va en una sola línea y sin el carácter |.
+function limpiarComentario(t) {
+  return String(t || "").replace(/[|\r\n\t]+/g, " ").replace(/\s{2,}/g, " ").trim().slice(0, MAX_COMENTARIO);
+}
+function escapar(t) {
+  return String(t).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+// Copia un texto. Si el navegador no lo permite, deja el texto seleccionado para copiarlo a mano.
+async function copiar(texto, campo, aviso, mensaje) {
+  try {
+    await navigator.clipboard.writeText(texto);
+    aviso.textContent = mensaje;
+    return;
+  } catch (e) { /* se intenta la otra forma */ }
+  let ok = false;
+  if (campo) {
+    campo.focus();
+    campo.select();
+    try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
+  }
+  aviso.textContent = ok ? mensaje : "Mantén presionado el texto y elige Copiar.";
+}
+
+/* 9. ARRANQUE ---------------------------------------------------------------------------- */
+pantallaInicio();
+</script>
+</body>
+</html>
